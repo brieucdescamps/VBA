@@ -1,4 +1,5 @@
 Attribute VB_Name = "STAR"
+
 Public Function AnnualizedReturn(DateRange As Range, LevelRange As Range, StartDate As Date, EndDate As Date) As Variant
     Dim i As Long
     Dim startIndex As Long: startIndex = -1
@@ -293,5 +294,100 @@ Public Function Worst10Drawdowns(DateRange As Range, LevelRange As Range, StartD
 
     Worst10Drawdowns = result
 End Function
+
+Public Function StressAwareCorrelationMatrix(DateRange As Range, LevelMatrix As Range, _
+    FullStartDate As Date, FullEndDate As Date, _
+    StressStartDates As Range, StressEndDates As Range) As Variant
+
+    Dim nAssets As Long: nAssets = LevelMatrix.Columns.count
+    Dim nObs As Long: nObs = LevelMatrix.Rows.count
+    Dim nStress As Long: nStress = StressStartDates.count
+    Dim i As Long, j As Long, t As Long, k As Long
+
+    ' Validate input dimensions
+    If DateRange.Rows.count <> nObs Or StressEndDates.count <> nStress Then
+        StressAwareCorrelationMatrix = CVErr(xlErrRef)
+        Exit Function
+    End If
+
+    Dim datesArr() As Variant: datesArr = DateRange.Value
+    Dim levelsArr() As Variant: levelsArr = LevelMatrix.Value
+    Dim stressStarts() As Variant: stressStarts = StressStartDates.Value
+    Dim stressEnds() As Variant: stressEnds = StressEndDates.Value
+
+    Dim result() As Variant
+    ReDim result(1 To nAssets, 1 To nAssets)
+
+    For i = 1 To nAssets
+        For j = 1 To nAssets
+            If i = j Then
+                result(i, j) = 1#
+            ElseIf i < j Then
+                ' Full period correlation
+                Dim xFull() As Double, yFull() As Double
+                ReDim xFull(1 To nObs)
+                ReDim yFull(1 To nObs)
+                Dim numFullObs As Long: numFullObs = 0
+                
+                For t = 1 To nObs
+                    If IsDate(datesArr(t, 1)) Then
+                        Dim currDate As Date: currDate = datesArr(t, 1)
+                        If currDate >= FullStartDate And currDate <= FullEndDate Then
+                            If IsNumeric(levelsArr(t, i)) And IsNumeric(levelsArr(t, j)) Then
+                                numFullObs = numFullObs + 1
+                                xFull(numFullObs) = levelsArr(t, i)
+                                yFull(numFullObs) = levelsArr(t, j)
+                            End If
+                        End If
+                    End If
+                Next t
+                
+                If numFullObs >= 2 Then
+                    ReDim Preserve xFull(1 To numFullObs)
+                    ReDim Preserve yFull(1 To numFullObs)
+                    result(i, j) = WorksheetFunction.Correl(xFull, yFull)
+                Else
+                    result(i, j) = "-"
+                End If
+            Else
+                ' Stress period correlation (aggregated over all defined stress periods)
+                Dim xStress() As Double, yStress() As Double
+                ReDim xStress(1 To nObs * nStress)
+                ReDim yStress(1 To nObs * nStress)
+                Dim numStressObs As Long: numStressObs = 0
+                
+                For k = 1 To nStress
+                    If IsDate(stressStarts(k, 1)) And IsDate(stressEnds(k, 1)) Then
+                        Dim sStart As Date: sStart = stressStarts(k, 1)
+                        Dim sEnd As Date: sEnd = stressEnds(k, 1)
+                        For t = 1 To nObs
+                            If IsDate(datesArr(t, 1)) Then
+                                Dim currDate2 As Date: currDate2 = datesArr(t, 1)
+                                If currDate2 >= sStart And currDate2 <= sEnd Then
+                                    If IsNumeric(levelsArr(t, i)) And IsNumeric(levelsArr(t, j)) Then
+                                        numStressObs = numStressObs + 1
+                                        xStress(numStressObs) = levelsArr(t, i)
+                                        yStress(numStressObs) = levelsArr(t, j)
+                                    End If
+                                End If
+                            End If
+                        Next t
+                    End If
+                Next k
+                
+                If numStressObs >= 2 Then
+                    ReDim Preserve xStress(1 To numStressObs)
+                    ReDim Preserve yStress(1 To numStressObs)
+                    result(i, j) = WorksheetFunction.Correl(xStress, yStress)
+                Else
+                    result(i, j) = "-"
+                End If
+            End If
+        Next j
+    Next i
+
+    StressAwareCorrelationMatrix = result
+End Function
+
 
 
