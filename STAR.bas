@@ -144,65 +144,56 @@ Public Function MaxDrawdown(DateRange As Range, LevelRange As Range, StartDate A
     Dim currentPeak As Double
     Dim currentLevel As Double
     Dim currentDrawdown As Double
-    Dim maxDrawdown As Double
+    Dim maxDD As Double           ' ? Renamed
     Dim worstDate As Date
-    
-    ' Ensure the ranges are consistent.
+
+    ' Validate input
     If DateRange.Count <> LevelRange.Count Then
         MaxDrawdown = CVErr(xlErrRef)
         Exit Function
     End If
-    
-    ' Find the indices corresponding to the StartDate and EndDate.
-    foundStart = False: foundEnd = False
+    If DateRange.Columns.Count > 1 Or LevelRange.Columns.Count > 1 Then
+        MaxDrawdown = CVErr(xlErrRef)
+        Exit Function
+    End If
+
+    ' Find start and end indices (by comparing dates only, ignoring time)
     For i = 1 To DateRange.Count
-        If Not foundStart Then
-            If CDate(DateRange.Cells(i, 1).Value) = StartDate Then
-                startIndex = i
-                foundStart = True
-            End If
+        If Not foundStart And Int(CDate(DateRange.Cells(i, 1).Value)) = Int(StartDate) Then
+            startIndex = i
+            foundStart = True
         End If
-        If Not foundEnd Then
-            If CDate(DateRange.Cells(i, 1).Value) = EndDate Then
-                endIndex = i
-                foundEnd = True
-            End If
+        If Not foundEnd And Int(CDate(DateRange.Cells(i, 1).Value)) = Int(EndDate) Then
+            endIndex = i
+            foundEnd = True
         End If
         If foundStart And foundEnd Then Exit For
     Next i
-    
-    ' If either date is not found, return an error.
-    If Not foundStart Or Not foundEnd Then
+
+    If Not foundStart Or Not foundEnd Or endIndex <= startIndex Then
         MaxDrawdown = CVErr(xlErrNA)
         Exit Function
     End If
-    
-    ' Initialize the current peak with the level at the start date.
+
     currentPeak = LevelRange.Cells(startIndex, 1).Value
-    maxDrawdown = 0 ' drawdown will be negative or zero
+    maxDD = 0
     worstDate = DateRange.Cells(startIndex, 1).Value
-    
-    ' Iterate over the period from startIndex to endIndex.
+
     For i = startIndex To endIndex
         currentLevel = LevelRange.Cells(i, 1).Value
-        
-        ' Update the current peak if a new high is reached.
-        If currentLevel > currentPeak Then
-            currentPeak = currentLevel
-        End If
-        
-        ' Compute the drawdown: percentage drop from the current peak.
-        currentDrawdown = (currentLevel - currentPeak) / currentPeak
-        
-        ' Check if this drawdown is the worst encountered so far.
-        If currentDrawdown < maxDrawdown Then
-            maxDrawdown = currentDrawdown
-            worstDate = DateRange.Cells(i, 1).Value
+        If IsNumeric(currentLevel) Then
+            If currentLevel > currentPeak Then currentPeak = currentLevel
+            If currentPeak <> 0 Then
+                currentDrawdown = (currentLevel - currentPeak) / currentPeak
+                If currentDrawdown < maxDD Then
+                    maxDD = currentDrawdown
+                    worstDate = DateRange.Cells(i, 1).Value
+                End If
+            End If
         End If
     Next i
-    
-    ' Return an array:
-    '   Element 0: Maximum drawdown (as a decimal; e.g., -0.2 for a 20% drawdown)
-    '   Element 1: Date when the worst drawdown occurred.
-    MaxDrawdown = Array(maxDrawdown, worstDate)
+
+    MaxDrawdown = Array(maxDD, worstDate)
 End Function
+
+
